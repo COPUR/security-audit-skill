@@ -55,6 +55,7 @@ const STATUSES = new Set([
   "blocked",
   "deferred",
 ]);
+const FINGERPRINT_DECISIONS = new Set(["confirmed", "needs_validation", "rejected", "unvalidated"]);
 const ATTEMPT_STATUSES = new Set(["covered", "candidate", "blocked"]);
 const ATTEMPT_FIELDS = [
   "wave",
@@ -77,6 +78,10 @@ const PRIOR_STATUSES = new Set([
   "prior_covered_same_source",
   "prior_covered_changed_source",
   "prior_rejected_claim_changed",
+  "prior_rejected_same_claim",
+  "prior_candidate_unvalidated",
+  "prior_incomplete",
+  "prior_not_applicable",
   "none",
 ]);
 const FINGERPRINT_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$/;
@@ -345,6 +350,12 @@ function isVisibleText(value, maxLength = MAX_TEXT_LENGTH) {
     hasVisibleProse(value);
 }
 
+function textError(value, maxLength = MAX_TEXT_LENGTH) {
+  return typeof value === "string" && value.length > maxLength
+    ? `invalid text: exceeds ${maxLength} characters`
+    : "invalid text";
+}
+
 function isCanonicalRef(value) {
   return isVisibleText(value, 1024) &&
     !PATH_FORBIDDEN_CHARACTER.test(value) &&
@@ -409,7 +420,7 @@ function validateStringArray(value, location, errors, options = {}) {
   value.slice(0, MAX_LIST_ITEMS).forEach((entry, index) => {
     const entryLocation = `${location}[${index}]`;
     const valid = pathValue ? isSafeRelativePath(entry) : isVisibleText(entry);
-    if (!valid) errors.push(`${entryLocation}: invalid ${pathValue ? "repository-relative path" : "text"}`);
+    if (!valid) errors.push(`${entryLocation}: ${pathValue ? "invalid repository-relative path" : textError(entry)}`);
     if (fingerprint && typeof entry === "string" && !FINGERPRINT_PATTERN.test(entry)) {
       errors.push(`${entryLocation}: invalid fingerprint`);
     }
@@ -435,9 +446,9 @@ function validateChecks(value, location, errors) {
     }
     if (!isSafeAgentId(check.agent_id)) errors.push(`${base}.agent_id: expected a canonical lowercase agent ID`);
     validateStringArray(check.reviewed_paths, `${base}.reviewed_paths`, errors, { allowEmpty: false, pathValue: true });
-    if (!isVisibleText(check.invariant)) errors.push(`${base}.invariant: invalid text`);
+    if (!isVisibleText(check.invariant)) errors.push(`${base}.invariant: ${textError(check.invariant)}`);
     if (check.method !== "source" && check.method !== "local") errors.push(`${base}.method: expected "source" or "local"`);
-    if (!isVisibleText(check.result)) errors.push(`${base}.result: invalid text`);
+    if (!isVisibleText(check.result)) errors.push(`${base}.result: ${textError(check.result)}`);
     if (check.method === "source" && check.artifact !== null) {
       errors.push(`${base}.artifact: source-only check must use null`);
     } else if (check.method === "local") {
@@ -481,11 +492,25 @@ function validateExcludedBlocks(value, location, errors) {
       errors.push(`${base}: expected object`);
       return;
     }
-    if (!isVisibleText(entry.block)) errors.push(`${base}.block: invalid text`);
-    if (!isVisibleText(entry.reason)) errors.push(`${base}.reason: invalid text`);
+    if (!isVisibleText(entry.block)) errors.push(`${base}.block: ${textError(entry.block)}`);
+    if (!isVisibleText(entry.reason)) errors.push(`${base}.reason: ${textError(entry.reason)}`);
     if (typeof entry.block === "string" && seen.has(entry.block)) errors.push(`${base}.block: duplicate entry`);
     if (typeof entry.block === "string") seen.add(entry.block);
   });
+}
+
+// Optional parent bookkeeping: the final disposition of each fingerprint linked to the unit.
+function validateFingerprintDecisions(unit, base, errors) {
+  const location = `${base}.fingerprint_decisions`;
+  if (!isObject(unit.fingerprint_decisions)) {
+    errors.push(`${location}: expected object`);
+    return;
+  }
+  const linked = new Set(Array.isArray(unit.result_fingerprints) ? unit.result_fingerprints : []);
+  for (const [fingerprint, decision] of Object.entries(unit.fingerprint_decisions)) {
+    if (!linked.has(fingerprint)) errors.push(`${location}: ${safeQuote(fingerprint)} is not in result_fingerprints`);
+    if (!FINGERPRINT_DECISIONS.has(decision)) errors.push(`${location}[${safeQuote(fingerprint)}]: invalid value ${safeQuote(decision)}`);
+  }
 }
 
 function semanticKey(unit) {
@@ -609,7 +634,7 @@ function validateAttempts(value, unit, base, errors) {
     validateReviewedPathOwnership(attempt, attemptBase, errors);
     validateStringArray(attempt.result_fingerprints, `${attemptBase}.result_fingerprints`, errors, { fingerprint: true });
     validateStringArray(attempt.unresolved, `${attemptBase}.unresolved`, errors);
-    if (!isVisibleText(attempt.reassignment_reason)) errors.push(`${attemptBase}.reassignment_reason: invalid text`);
+    if (!isVisibleText(attempt.reassignment_reason)) errors.push(`${attemptBase}.reassignment_reason: ${textError(attempt.reassignment_reason)}`);
     validateStateInvariants(attempt, attemptBase, errors);
 
     if (Array.isArray(attempt.local_checks)) {
@@ -652,9 +677,9 @@ function collectUnitErrors(unit, index) {
     if (!hasOwn(unit, field)) errors.push(`${base}: missing required field ${safeQuote(field)}`);
   }
   for (const field of ["surface", "boundary", "subsystem", "attack_class"]) {
-    if (!isVisibleText(unit[field])) errors.push(`${base}.${field}: invalid text`);
+    if (!isVisibleText(unit[field])) errors.push(`${base}.${field}: ${textError(unit[field])}`);
   }
-  if (hasOwn(unit, "lifecycle") && !isVisibleText(unit.lifecycle)) errors.push(`${base}.lifecycle: invalid text`);
+  if (hasOwn(unit, "lifecycle") && !isVisibleText(unit.lifecycle)) errors.push(`${base}.lifecycle: ${textError(unit.lifecycle)}`);
 
   let expectedId = null;
   if (!isObject(unit.canonical_refs)) {
@@ -665,7 +690,9 @@ function collectUnitErrors(unit, index) {
       if (!hasOwn(unit.canonical_refs, field)) {
         errors.push(`${base}.canonical_refs: missing required field ${safeQuote(field)}`);
       } else if (!isCanonicalRef(unit.canonical_refs[field])) {
-        errors.push(`${base}.canonical_refs.${field}: invalid canonical reference`);
+        const ref = unit.canonical_refs[field];
+        const tooLong = typeof ref === "string" && ref.length > 1024 ? ": exceeds 1024 characters" : "";
+        errors.push(`${base}.canonical_refs.${field}: invalid canonical reference${tooLong}`);
       }
     }
     if (Object.keys(unit.canonical_refs).some((field) => !expectedFields.includes(field))) {
@@ -712,6 +739,7 @@ function collectUnitErrors(unit, index) {
   validateReviewedPathOwnership(unit, base, errors);
   validateStringArray(unit.result_fingerprints, `${base}.result_fingerprints`, errors, { fingerprint: true });
   validateStringArray(unit.unresolved, `${base}.unresolved`, errors);
+  if (hasOwn(unit, "fingerprint_decisions")) validateFingerprintDecisions(unit, base, errors);
 
   validateStateInvariants(unit, base, errors);
 

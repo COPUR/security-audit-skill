@@ -54,7 +54,7 @@ Read tests, build definitions, manifests, packaging, and maintained environment 
 7. Whether trusted parent-side code can promote predeclared scratch files with path-confined no-follow descriptor traversal, nonblocking regular-file checks, no-follow traversal of every destination parent, exclusive regular-file destination creation, and explicit per-file and cumulative size bounds. Missing promotion controls block use of scratch files as evidence.
 ```
 
-Add focused reconnaissance agents for materially distinct deployment modes or subsystems that these four do not map. Do not silently omit them: if the budget gate in `SKILL.md` blocks a focused agent, launch nothing for it, seed the unmapped area as a `deferred` ledger unit with reason `budget_cannot_reserve_critics_and_validation`, and disclose the gap in the report.
+Add focused reconnaissance agents for materially distinct deployment modes or subsystems that these four do not map. Do not silently omit them: if the budget gate in `SKILL.md` blocks a focused agent, launch nothing for it, seed the unmapped area as one `deferred` placeholder unit with reason `budget_cannot_fund_focused_reconnaissance`, and disclose the gap in the report. A placeholder uses the area's root directory as `starting_paths` and as its `subsystem` reference, `<root>#unmapped` as its `surface` and `boundary` references, and `ATTACK-CLASSES.md#Wildcard` as its attack class; a later run that maps the area replaces it with real units.
 
 ## Prior-run input
 
@@ -66,7 +66,9 @@ Before selecting work, the parent reads every available prior `coverage-ledger.j
 - Build current work units for every prior `needs_validation`, `deferred`, `blocked`, `out_of_scope`, and changed-source unit. These states are priority input, never deduplication or suppression keys.
 - Carry a still-blocked prior `needs_validation` record with the same fingerprint only after current source supports its trace. Link it to a current `planned` unit with `prior_status: "prior_needs_validation"`; the record keeps the unresolved blocker. The Phase 3 verifier that re-checks the carried record becomes that unit's assignment owner; its re-check is the unit's first check and moves the unit to `candidate` with the carried fingerprint. Include the record in final verification.
 - Treat prior rejected records as stale claims unless current evidence changes the failed trace or missing condition. An unchanged rejection suppresses only that exact claim, not review of the coverage unit.
-- Record missing or incompatible ledgers instead of treating them as empty coverage.
+- Seed a prior unvalidated `candidate` unit as current `planned` work with `prior_status: "prior_candidate_unvalidated"`, a prior `in_progress` unit as `planned` with `prior_incomplete`, and a prior `not_applicable` unit as `planned` with `prior_not_applicable` so current source can confirm the exclusion. Mark a unit whose only prior record is an unchanged rejected claim `prior_rejected_same_claim`; it is still current work, and only the failed claim is suppressed.
+- Seed a prior same-source `covered` unit with `prior_status: "prior_covered_same_source"`. In `quick` and `standard`, it starts `deferred` with reason `prior_covered_same_source` and is reported as covered by the prior run's evidence, not this run's; the coverage critic may propose it as a missing unit, which reopens it as `planned`. In `deep`, it starts `planned` and receives its independent second pass.
+- A prior ledger is compatible when it names the same repository identifier and the current `validate-coverage-ledger.cjs` accepts it. Record missing or incompatible ledgers instead of treating them as empty coverage.
 
 State paths and source refs used in `run-metadata.json`. Summarize only the coverage consequences in `architecture.md`.
 
@@ -99,7 +101,7 @@ Derive `coverage_id` without lossy slugs:
 2. Encode its UTF-8 bytes with RFC 3986 percent encoding: leave only `A-Z a-z 0-9 - . _ ~` unescaped and use uppercase `%HH` for every other byte.
 3. Join encoded `surface`, `boundary`, `subsystem`, and `attack_class` references with `::`; append encoded `lifecycle` when present.
 
-Use the fixed canonical value `profile/quick/all-in-scope-subsystems` for the quick profile's coarsened subsystem dimension. Do not include wave number, agent, verdict, severity, or line number in a reference or ID. Sort units lexicographically by `coverage_id` before each assignment. Fail on every duplicate ID. If duplicate IDs have different semantic fields, treat that as a canonical identity collision; never merge or silently overwrite them. The validator also rejects one semantic tuple represented by different canonical references.
+Use the fixed canonical value `profile/quick/all-in-scope-subsystems` for the quick profile's coarsened subsystem dimension. Do not include wave number, agent, verdict, severity, or line number in a reference or ID. Sort units lexicographically by `coverage_id` before each assignment. Fail on every duplicate ID. If duplicate IDs have different semantic fields, treat that as a canonical identity collision; never merge or silently overwrite them. The validator also rejects one semantic tuple represented by different canonical references. The semantic tuple is the human `surface`, `boundary`, `subsystem`, `attack_class`, and optional `lifecycle` labels, so give distinct source objects distinct labels (for example include the file or route in the `surface` label when two handlers share a name).
 
 Each unit records:
 
@@ -120,7 +122,7 @@ Each unit records:
   "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
   "selected_companion_blocks": ["FILE.md#section"],
   "excluded_blocks": [{"block": "FILE.md#section", "reason": "..."}],
-  "prior_status": "new|prior_confirmed_same_source|prior_confirmed_changed_source|prior_needs_validation|prior_deferred|prior_blocked|prior_out_of_scope|prior_covered_same_source|prior_covered_changed_source|prior_rejected_claim_changed|none",
+  "prior_status": "new|prior_confirmed_same_source|prior_confirmed_changed_source|prior_needs_validation|prior_deferred|prior_blocked|prior_out_of_scope|prior_covered_same_source|prior_covered_changed_source|prior_rejected_claim_changed|prior_rejected_same_claim|prior_candidate_unvalidated|prior_incomplete|prior_not_applicable|none",
   "attempts": [],
   "wave": 1,
   "status": "planned",
@@ -134,7 +136,7 @@ Each unit records:
 
 When `lifecycle` is material, add both `canonical_refs.lifecycle` and a human `lifecycle` field. `ordinary_attack_class_block` is null only when no ordinary block applies. The selected companion list includes each applicable class plus its companion `Core discipline`, `Universal moves`, and `Validation rules`; `excluded_blocks` records every considered but unselected block and the source fact that excludes it.
 
-The parent may add bookkeeping fields but keeps the semantic fields above stable. In `prior_status`, `new` marks a surface first seen in this run when compatible prior ledgers exist; `none` marks a unit seeded when no compatible prior ledger is available. Prior `deferred`, `blocked`, `out_of_scope`, and changed-source units initialize as current `planned` work when now in scope. A prior same-source covered unit remains visible in the current ledger; assign changed source, important lifecycle paths, and exact conflicts first, then use the coverage critic to decide whether it needs another pass.
+The parent may add bookkeeping fields but keeps the semantic fields above stable. In `prior_status`, `new` marks a surface first seen in this run when compatible prior ledgers exist; `none` marks a unit seeded when no compatible prior ledger is available. Prior `deferred`, `blocked`, `out_of_scope`, and changed-source units initialize as current `planned` work when now in scope. A prior same-source covered unit remains visible in the current ledger with the starting state given under Prior-run input; assign changed source, important lifecycle paths, and exact conflicts first, then use the coverage critic to decide whether it needs another pass.
 
 `attempts` is an append-only archive for evidence-bearing assignments that a coverage critic reopens. Before reassignment, append the prior unit's exact `wave`, `status`, `agent_id`, `reviewed_paths`, `local_checks`, `result_fingerprints`, and `unresolved`, plus the critic's source-backed `reassignment_reason`. Only `blocked`, `covered`, and `candidate` states can be archived. Archived attempts retain the same state and evidence invariants as live units, use strictly increasing waves below the current wave, and retain their producing owners and artifacts. The next assignment increments `wave`, uses a fresh owner, and starts with empty live evidence. If the profile or budget prevents another assignment, increment `wave` and use live `deferred` state with null owner, empty evidence, and the stop reason. Never copy an archived owner's checks or artifacts into the live state. A later live terminal state contains only the new attempt's evidence; the archive remains unchanged.
 
@@ -153,4 +155,4 @@ Canonical agent IDs match `^[a-z0-9][a-z0-9_-]{0,63}$` and are not Windows devic
 
 The ledger is the coverage claim. An architecture summary, agent count, or generic "auth reviewed" sentence is not coverage evidence. Phase 2 closes units only from the paths and checks in a hunter's structured result.
 
-Run `node <skill-dir>/validate-coverage-ledger.cjs <output-dir>/coverage-ledger.json` after seeding, after every parent update, and before Phase 6. The validator rejects input beyond 5 MiB, 64 nesting levels, 10,000 units, 1,000 entries in a nested collection, or 500,000 traversed values, and caps reported validation errors at 100. In practice the 5 MiB byte limit holds roughly 2,000-5,000 realistic units, so it binds before the 10,000-unit cap. Fix every error before assigning work or making a coverage claim.
+Run `node <skill-dir>/validate-coverage-ledger.cjs <output-dir>/coverage-ledger.json` after seeding, after every parent update, and before Phase 6. The validator rejects input beyond 5 MiB, 64 nesting levels, 10,000 units, 1,000 entries in a nested collection, or 500,000 traversed values, and caps reported validation errors at 100. In practice the 5 MiB byte limit holds roughly 2,000-5,000 realistic units, so it binds before the 10,000-unit cap. Each text field is limited to 4,096 characters and each canonical reference to 1,024; errors name the limit. Fix every error before assigning work or making a coverage claim.

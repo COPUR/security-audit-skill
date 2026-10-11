@@ -198,6 +198,28 @@ test("block references resolve bold classes and qualified section headings", () 
   }
 });
 
+test("validates optional fingerprint decisions against linked fingerprints", () => {
+  const base = errorsFor([unit()]);
+  assert.deepEqual(base, []);
+  const decided = unit({ fingerprint_decisions: {} });
+  assert.deepEqual(errorsFor([decided]), []);
+  const stray = errorsFor([unit({ fingerprint_decisions: { "fp-1": "confirmed" } })]);
+  assert.ok(stray.some((message) => /"fp-1" is not in result_fingerprints/.test(message)), stray.join("\n"));
+  const badValue = errorsFor([unit({ fingerprint_decisions: { "fp-1": "maybe" } })]);
+  assert.ok(badValue.some((message) => /invalid value "maybe"/.test(message)), badValue.join("\n"));
+});
+
+test("accepts the prior statuses for unvalidated, incomplete, not-applicable and unchanged rejected work", () => {
+  for (const prior of ["prior_candidate_unvalidated", "prior_incomplete", "prior_not_applicable", "prior_rejected_same_claim"]) {
+    assert.deepEqual(errorsFor([unit({ prior_status: prior })]), [], prior);
+  }
+});
+
+test("names the length limit when text is too long", () => {
+  const messages = errorsFor([unit({ surface: "x".repeat(4097) })]);
+  assert.ok(messages.some((message) => /surface: invalid text: exceeds 4096 characters/.test(message)), messages.join("\n"));
+});
+
 test("text preflight enforces structural cardinality limits", () => {
   const depthLimit = LIMITS.nestingDepth;
   assert.doesNotThrow(() => preflightJsonText(`${"[".repeat(depthLimit)}0${"]".repeat(depthLimit)}`));

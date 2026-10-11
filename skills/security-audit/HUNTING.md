@@ -2,9 +2,9 @@
 
 ### Phase 2: Run coverage-led hunting waves
 
-The parent assigns `planned` ledger units to `general` agents, except units that carry a prior record's fingerprint for Phase 3 re-checking (`prior_confirmed_same_source`, or `prior_needs_validation` linked to a carried record). Those wait for their Phase 3 verifier and do not count as remaining `planned` work in the critic loop below. Use enough focused hunters to cover the units without combining unrelated boundaries. One hunter may own closely related units in one subsystem; no unit may be silently unassigned because of an agent-count limit — a unit the budget cannot reach is explicitly `deferred` with reason `budget_cannot_reserve_critics_and_validation`.
+The parent assigns `planned` ledger units to `general` agents, except units that carry a prior record's fingerprint for Phase 3 re-checking (`prior_confirmed_same_source`, or `prior_needs_validation` linked to a carried record). Those wait for their Phase 3 verifier and do not count as remaining `planned` work in the critic loop below. Use enough focused hunters to cover the units without combining unrelated boundaries. One hunter may own closely related units in one subsystem; no unit may be silently unassigned because of an agent-count limit — a unit the hunting allowance cannot reach is explicitly `deferred` with reason `budget_hunting_allowance_spent`.
 
-When a budget or profile caps hunter count, assign units in priority order and record the ordering rationale in the ledger. Rank by: (1) unauthenticated or lowest-trust entry surfaces before authenticated ones; (2) boundaries protecting the most valuable resources (credentials, cross-tenant data, code execution, release authority); (3) prior-run gaps, revalidation targets, and changed source before same-source re-passes; (4) units whose class historically yields confirmed findings for this target type over speculative ones. Ties break lexicographically by `coverage_id` so runs stay deterministic.
+When a budget or profile caps hunter count, assign units in priority order and record the ordering rationale in a `priority_rationale` bookkeeping field on each assigned or deferred unit. Rank by: (1) unauthenticated or lowest-trust entry surfaces before authenticated ones; (2) boundaries protecting the most valuable resources (credentials, cross-tenant data, code execution, release authority); (3) prior-run gaps, revalidation targets, and changed source before same-source re-passes; (4) units whose class historically yields confirmed findings for this target type over speculative ones. Ties break lexicographically by `coverage_id` so runs stay deterministic.
 
 Before launch, the parent changes assigned units to `in_progress`, sets a canonical lowercase `agent_id`, and creates that agent's `scratch/` and parent-owned `artifacts/`. Hunters read source and parent-provided context, write only to their unique `scratch/`, and return one structured result through the Task tool. They never write retained artifacts or edit target source, `architecture.md`, `coverage-ledger.json`, `findings.json`, or another agent's files.
 
@@ -198,7 +198,11 @@ Return exactly one JSON object, with no surrounding prose:
       "boundary": "...",
       "subsystem": "...",
       "attack_class": "...",
+      "lifecycle": "optional; include when the gap is specific to one lifecycle mode",
       "starting_paths": ["repo/relative/path"],
+      "ordinary_attack_class_block": "ATTACK-CLASSES.md#Class or null",
+      "selected_companion_blocks": ["FILE.md#section"],
+      "excluded_blocks": [{"block": "FILE.md#section", "reason": "..."}],
       "reason": "why this needs its own deterministic coverage unit"
     }
   ]
@@ -230,7 +234,9 @@ Immediately after each hunter wave, spend the reserved invocation on one fresh `
       "boundary": "...",
       "subsystem": "...",
       "attack_class": "...",
+      "lifecycle": "optional; include when the gap is specific to one lifecycle mode",
       "starting_paths": ["repo/relative/path"],
+      "ordinary_attack_class_block": "ATTACK-CLASSES.md#Class or null",
       "selected_companion_blocks": ["FILE.md#section"],
       "excluded_blocks": [{"block": "FILE.md#section", "reason": "..."}],
       "reason": "source-backed coverage gap"
