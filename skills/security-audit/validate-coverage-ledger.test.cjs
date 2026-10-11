@@ -173,7 +173,7 @@ test("CLI rejects block references that do not name a shipped class or section",
     selected_companion_blocks: ["NO-SUCH-FILE.md#Core discipline"],
   })]));
   assert.equal(result.status, 1, cliOutput(result));
-  assert.match(result.stderr, /ordinary_attack_class_block: "Access controls" is not a class or section in ATTACK-CLASSES\.md/);
+  assert.match(result.stderr, /ordinary_attack_class_block: "Access controls" is not an attack class or shared section in ATTACK-CLASSES\.md/);
   assert.match(result.stderr, /selected_companion_blocks\[0\]: unknown attack-class source "NO-SUCH-FILE\.md"/);
 });
 
@@ -187,7 +187,15 @@ test("block references resolve bold classes and qualified section headings", () 
     ],
   })];
   assert.deepEqual(validateBlockReferences(ledger, __dirname), []);
-  assert.equal(validateBlockReferences([unit({ ordinary_attack_class_block: "SKILL.md#Anti-patterns" })], __dirname).length, 1);
+  for (const overrides of [
+    { ordinary_attack_class_block: "SKILL.md#Anti-patterns" },
+    { ordinary_attack_class_block: "AI-AND-LLM.md#Persistent memory poisoning" },
+    { selected_companion_blocks: ["AI-AND-LLM.md#When to use this file"] },
+    { selected_companion_blocks: ["ATTACK-CLASSES.md#Injection"] },
+    { canonical_refs: { ...unit().canonical_refs, attack_class: "ATTACK-CLASSES.md#No such class" } },
+  ]) {
+    assert.equal(validateBlockReferences([unit(overrides)], __dirname).length, 1, JSON.stringify(overrides));
+  }
 });
 
 test("text preflight enforces structural cardinality limits", () => {

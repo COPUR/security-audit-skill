@@ -805,9 +805,11 @@ function validateDocument(ledger) {
   return errors;
 }
 
-// Block references are `FILE.md#Name`, where Name is a bold class line or a heading
-// (without any parenthetical qualifier) in an attack-class source shipped beside this file.
+// Block references are `FILE.md#Name`. Name is a bold attack-class line, or in a companion
+// file one of its shared sections, in an attack-class source shipped beside this file.
+const ORDINARY_SOURCE = "ATTACK-CLASSES.md";
 const NON_BLOCK_SOURCES = new Set(["SKILL.md", "RECONNAISSANCE.md", "HUNTING.md", "VALIDATION-AND-REPORTING.md"]);
+const COMPANION_SECTIONS = ["Core discipline", "Universal moves", "Validation rules"];
 
 function loadBlockIndex(skillDir) {
   const index = new Map();
@@ -816,9 +818,12 @@ function loadBlockIndex(skillDir) {
     const names = new Set();
     for (const line of fs.readFileSync(path.join(skillDir, name), "utf8").split("\n")) {
       const bold = /^\*\*([^*]+)\*\*\s*(?:\([^)]*\))?\s*$/.exec(line);
-      const heading = /^#+\s+(.+?)\s*$/.exec(line);
-      const label = bold ? bold[1] : heading ? heading[1].replace(/\s*\(.*\)\s*$/, "") : null;
-      if (label) names.add(label.trim());
+      const heading = /^##\s+(.+?)\s*$/.exec(line);
+      if (bold) names.add(bold[1].trim());
+      if (heading && name !== ORDINARY_SOURCE) {
+        const section = heading[1].replace(/\s*\(.*\)\s*$/, "");
+        if (COMPANION_SECTIONS.includes(section)) names.add(section);
+      }
     }
     index.set(name, names);
   }
@@ -829,23 +834,33 @@ function validateBlockReferences(ledger, skillDir) {
   const errors = [];
   if (!Array.isArray(ledger)) return errors;
   const index = loadBlockIndex(skillDir);
-  const check = (ref, location) => {
+  const check = (ref, location, { ordinary = false, companion = false } = {}) => {
     if (typeof ref !== "string") return;
     const hash = ref.indexOf("#");
     const file = hash > 0 ? ref.slice(0, hash) : "";
     const name = hash > 0 ? ref.slice(hash + 1) : "";
     if (!index.has(file)) {
       errors.push(`${location}: unknown attack-class source ${safeQuote(file || ref)}`);
+    } else if (ordinary && file !== ORDINARY_SOURCE) {
+      errors.push(`${location}: ordinary blocks must come from ${ORDINARY_SOURCE}`);
+    } else if (companion && file === ORDINARY_SOURCE) {
+      errors.push(`${location}: companion blocks must not come from ${ORDINARY_SOURCE}`);
     } else if (!index.get(file).has(name)) {
-      errors.push(`${location}: ${safeQuote(name)} is not a class or section in ${file}`);
+      errors.push(`${location}: ${safeQuote(name)} is not an attack class or shared section in ${file}`);
     }
   };
   ledger.forEach((unit, unitIndex) => {
     if (!isObject(unit) || errors.length >= LIMITS.validationErrors) return;
     const base = `$[${unitIndex}]`;
-    if (unit.ordinary_attack_class_block !== null) check(unit.ordinary_attack_class_block, `${base}.ordinary_attack_class_block`);
+    const attackClass = isObject(unit.canonical_refs) ? unit.canonical_refs.attack_class : null;
+    if (typeof attackClass === "string" && /^[A-Z0-9-]+\.md#/.test(attackClass)) {
+      check(attackClass, `${base}.canonical_refs.attack_class`);
+    }
+    if (unit.ordinary_attack_class_block !== null) {
+      check(unit.ordinary_attack_class_block, `${base}.ordinary_attack_class_block`, { ordinary: true });
+    }
     if (Array.isArray(unit.selected_companion_blocks)) {
-      unit.selected_companion_blocks.forEach((ref, i) => check(ref, `${base}.selected_companion_blocks[${i}]`));
+      unit.selected_companion_blocks.forEach((ref, i) => check(ref, `${base}.selected_companion_blocks[${i}]`, { companion: true }));
     }
     if (Array.isArray(unit.excluded_blocks)) {
       unit.excluded_blocks.forEach((entry, i) => isObject(entry) && check(entry.block, `${base}.excluded_blocks[${i}].block`));
