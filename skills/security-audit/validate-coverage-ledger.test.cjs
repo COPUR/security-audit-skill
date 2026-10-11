@@ -11,6 +11,7 @@ const {
   isSafeAgentId,
   isSafeRelativePath,
   preflightJsonText,
+  validateBlockReferences,
   validateDocument,
 } = require("./validate-coverage-ledger.cjs");
 
@@ -39,7 +40,7 @@ function unit(overrides = {}) {
     starting_paths: ["src/router.ts", "src/authz.ts"],
     ordinary_attack_class_block: "ATTACK-CLASSES.md#Access control",
     selected_companion_blocks: [],
-    excluded_blocks: [{ block: "WEB-PROTOCOL-AND-AUTH.md#Cache behavior", reason: "The route is not cached." }],
+    excluded_blocks: [{ block: "WEB-PROTOCOL-AND-AUTH.md#Web cache poisoning through unkeyed input", reason: "The route is not cached." }],
     prior_status: "new",
     attempts: [],
     wave: 1,
@@ -153,8 +154,8 @@ test("text preflight ignores structural characters and escapes inside strings", 
   const value = unit({
     surface: "Route \\ slash [list] {object}, colon: quoted \"value\"",
     excluded_blocks: [{
-      block: "COMPANION.md#Literal [brackets] {braces}",
-      reason: "The text contains a backslash \\ before an escaped \"quote\".",
+      block: "AI-AND-LLM.md#Persistent memory poisoning",
+      reason: "Literal [brackets] {braces} and a backslash \\ before an escaped \"quote\".",
     }],
   });
   const contents = JSON.stringify([value]);
@@ -164,6 +165,29 @@ test("text preflight ignores structural characters and escapes inside strings", 
     const result = runCli(contents);
     assert.equal(result.status, 0, cliOutput(result));
   }
+});
+
+test("CLI rejects block references that do not name a shipped class or section", { skip: !HAS_SAFE_INPUT_OPEN }, () => {
+  const result = runCli(JSON.stringify([unit({
+    ordinary_attack_class_block: "ATTACK-CLASSES.md#Access controls",
+    selected_companion_blocks: ["NO-SUCH-FILE.md#Core discipline"],
+  })]));
+  assert.equal(result.status, 1, cliOutput(result));
+  assert.match(result.stderr, /ordinary_attack_class_block: "Access controls" is not a class or section in ATTACK-CLASSES\.md/);
+  assert.match(result.stderr, /selected_companion_blocks\[0\]: unknown attack-class source "NO-SUCH-FILE\.md"/);
+});
+
+test("block references resolve bold classes and qualified section headings", () => {
+  const ledger = [unit({
+    selected_companion_blocks: [
+      "AI-AND-LLM.md#Core discipline",
+      "AI-AND-LLM.md#Tool-argument injection into a downstream sink",
+      "AI-AND-LLM.md#Universal moves",
+      "AI-AND-LLM.md#Validation rules",
+    ],
+  })];
+  assert.deepEqual(validateBlockReferences(ledger, __dirname), []);
+  assert.equal(validateBlockReferences([unit({ ordinary_attack_class_block: "SKILL.md#Anti-patterns" })], __dirname).length, 1);
 });
 
 test("text preflight enforces structural cardinality limits", () => {

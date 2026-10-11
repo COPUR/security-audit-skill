@@ -805,6 +805,55 @@ function validateDocument(ledger) {
   return errors;
 }
 
+// Block references are `FILE.md#Name`, where Name is a bold class line or a heading
+// (without any parenthetical qualifier) in an attack-class source shipped beside this file.
+const NON_BLOCK_SOURCES = new Set(["SKILL.md", "RECONNAISSANCE.md", "HUNTING.md", "VALIDATION-AND-REPORTING.md"]);
+
+function loadBlockIndex(skillDir) {
+  const index = new Map();
+  for (const name of fs.readdirSync(skillDir)) {
+    if (!name.endsWith(".md") || NON_BLOCK_SOURCES.has(name)) continue;
+    const names = new Set();
+    for (const line of fs.readFileSync(path.join(skillDir, name), "utf8").split("\n")) {
+      const bold = /^\*\*([^*]+)\*\*\s*(?:\([^)]*\))?\s*$/.exec(line);
+      const heading = /^#+\s+(.+?)\s*$/.exec(line);
+      const label = bold ? bold[1] : heading ? heading[1].replace(/\s*\(.*\)\s*$/, "") : null;
+      if (label) names.add(label.trim());
+    }
+    index.set(name, names);
+  }
+  return index;
+}
+
+function validateBlockReferences(ledger, skillDir) {
+  const errors = [];
+  if (!Array.isArray(ledger)) return errors;
+  const index = loadBlockIndex(skillDir);
+  const check = (ref, location) => {
+    if (typeof ref !== "string") return;
+    const hash = ref.indexOf("#");
+    const file = hash > 0 ? ref.slice(0, hash) : "";
+    const name = hash > 0 ? ref.slice(hash + 1) : "";
+    if (!index.has(file)) {
+      errors.push(`${location}: unknown attack-class source ${safeQuote(file || ref)}`);
+    } else if (!index.get(file).has(name)) {
+      errors.push(`${location}: ${safeQuote(name)} is not a class or section in ${file}`);
+    }
+  };
+  ledger.forEach((unit, unitIndex) => {
+    if (!isObject(unit) || errors.length >= LIMITS.validationErrors) return;
+    const base = `$[${unitIndex}]`;
+    if (unit.ordinary_attack_class_block !== null) check(unit.ordinary_attack_class_block, `${base}.ordinary_attack_class_block`);
+    if (Array.isArray(unit.selected_companion_blocks)) {
+      unit.selected_companion_blocks.forEach((ref, i) => check(ref, `${base}.selected_companion_blocks[${i}]`));
+    }
+    if (Array.isArray(unit.excluded_blocks)) {
+      unit.excluded_blocks.forEach((entry, i) => isObject(entry) && check(entry.block, `${base}.excluded_blocks[${i}].block`));
+    }
+  });
+  return errors.slice(0, LIMITS.validationErrors);
+}
+
 function run(file) {
   if (!file) {
     console.error("Usage: node validate-coverage-ledger.cjs <path-to-coverage-ledger.json>");
@@ -838,6 +887,7 @@ function run(file) {
   let errors;
   try {
     errors = validateDocument(ledger);
+    if (errors.length === 0) errors = validateBlockReferences(ledger, __dirname);
   } catch {
     console.error("Failed to validate coverage ledger: unexpected validation error");
     return 1;
@@ -866,6 +916,7 @@ module.exports = {
   preflightJsonText,
   readFileWithinLimit,
   safeQuote,
+  validateBlockReferences,
   validateDocument,
 };
 
