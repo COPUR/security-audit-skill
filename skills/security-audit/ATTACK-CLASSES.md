@@ -117,7 +117,7 @@ Other agents hunt subtle bugs. This agent checks the basic exposures that are ea
 - Is there a `/debug`, `/admin`, `/test`, `/status`, `/health`, `/metrics`, `/env`, `/.env`, `/config` endpoint that is unprotected?
 - Are there any `.env`, `.env.local`, `credentials.json`, `*.pem`, `*.key` files checked into the repo?
 - Does the `.gitignore` actually cover secrets, uploads, and local config?
-- Are dependencies pinned? Are there known CVEs in the dependency tree? (check lockfiles)
+- Are dependencies pinned? Are there known CVEs in the dependency tree? (check lockfiles against advisory data already available locally; if none is available, record the lead as `needs_validation`, never fetch it)
 - Are there any `eval()`, `exec()`, `child_process`, `Function()`, `vm.runInContext`, `import()` with dynamic input?
 - Are CORS headers set to `*` or overly permissive? Is `Access-Control-Allow-Credentials` combined with a wildcard origin?
 - Are cookies missing `HttpOnly`, `Secure`, or `SameSite` attributes?
@@ -125,6 +125,6 @@ Other agents hunt subtle bugs. This agent checks the basic exposures that are ea
 - Is TLS enforced? Are there any HTTP-only endpoints?
 - Are error responses in production returning stack traces, internal paths, or SQL errors?
 
-This agent does not need to be creative. It needs to be thorough and literal. Check every item. Report each result.
+This agent does not need to be creative. It needs to be thorough and literal. Check every item. Return a traced boundary failure as a candidate and anything else (an unpinned dependency, a missing header with no demonstrated impact) under `hardening`.
 
 **Important**: For any finding this agent reports, it must verify the full code path, not just surface appearance. If a cookie is missing `HttpOnly`, check whether the cookie contains security-sensitive data and whether JS needs to read it by design. If an error message contains a field name, check whether the field is ever actually populated with sensitive data. A flag is not a finding — trace the impact before reporting.

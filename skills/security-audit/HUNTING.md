@@ -2,9 +2,9 @@
 
 ### Phase 2: Run coverage-led hunting waves
 
-The parent assigns `planned` ledger units to `general` agents. Use enough focused hunters to cover the units without combining unrelated boundaries. One hunter may own closely related units in one subsystem; no unit may be silently unassigned because of an agent-count limit — a unit the budget cannot reach is explicitly `deferred` with reason `budget_cannot_reserve_critics_and_validation`.
+The parent assigns `planned` ledger units to `general` agents, except units that carry a prior record's fingerprint for Phase 3 re-checking (`prior_confirmed_same_source`, or `prior_needs_validation` linked to a carried record). Those wait for their Phase 3 verifier and do not count as remaining `planned` work in the critic loop below. Use enough focused hunters to cover the units without combining unrelated boundaries. One hunter may own closely related units in one subsystem; no unit may be silently unassigned because of an agent-count limit — a unit the hunting allowance cannot reach is explicitly `deferred` with reason `budget_hunting_allowance_spent`.
 
-When a budget or profile caps hunter count, assign units in priority order and record the ordering rationale in the ledger. Rank by: (1) unauthenticated or lowest-trust entry surfaces before authenticated ones; (2) boundaries protecting the most valuable resources (credentials, cross-tenant data, code execution, release authority); (3) prior-run gaps, revalidation targets, and changed source before same-source re-passes; (4) units whose class historically yields confirmed findings for this target type over speculative ones. Ties break lexicographically by `coverage_id` so runs stay deterministic.
+When a budget or profile caps hunter count, assign units in priority order and record the ordering rationale in a `priority_rationale` bookkeeping field on each assigned or deferred unit. Rank by: (1) unauthenticated or lowest-trust entry surfaces before authenticated ones; (2) boundaries protecting the most valuable resources (credentials, cross-tenant data, code execution, release authority); (3) prior-run gaps, revalidation targets, and changed source before same-source re-passes; (4) units whose class historically yields confirmed findings for this target type over speculative ones. Ties break lexicographically by `coverage_id` so runs stay deterministic.
 
 Before launch, the parent changes assigned units to `in_progress`, sets a canonical lowercase `agent_id`, and creates that agent's `scratch/` and parent-owned `artifacts/`. Hunters read source and parent-provided context, write only to their unique `scratch/`, and return one structured result through the Task tool. They never write retained artifacts or edit target source, `architecture.md`, `coverage-ledger.json`, `findings.json`, or another agent's files.
 
@@ -198,7 +198,11 @@ Return exactly one JSON object, with no surrounding prose:
       "boundary": "...",
       "subsystem": "...",
       "attack_class": "...",
+      "lifecycle": "optional; include when the gap is specific to one lifecycle mode",
       "starting_paths": ["repo/relative/path"],
+      "ordinary_attack_class_block": "ATTACK-CLASSES.md#Class or null",
+      "selected_companion_blocks": ["FILE.md#section"],
+      "excluded_blocks": [{"block": "FILE.md#section", "reason": "..."}],
       "reason": "why this needs its own deterministic coverage unit"
     }
   ]
@@ -230,21 +234,23 @@ Immediately after each hunter wave, spend the reserved invocation on one fresh `
       "boundary": "...",
       "subsystem": "...",
       "attack_class": "...",
+      "lifecycle": "optional; include when the gap is specific to one lifecycle mode",
       "starting_paths": ["repo/relative/path"],
+      "ordinary_attack_class_block": "ATTACK-CLASSES.md#Class or null",
       "selected_companion_blocks": ["FILE.md#section"],
       "excluded_blocks": [{"block": "FILE.md#section", "reason": "..."}],
       "reason": "source-backed coverage gap"
     }
   ],
-  "reassign_ids": ["existing-id-that-did-not-close"],
-  "resolved_prior_leads": ["fingerprint"],
+  "reassign_ids": [{"coverage_id": "existing-id-that-did-not-close", "reason": "source-backed reassignment reason"}],
+  "resolved_prior_leads": [{"fingerprint": "fingerprint", "reason": "source-backed resolution"}],
   "stop": false
 }
 ```
 
-The critic checks for unmapped entry points, unchecked parallel paths, missing lifecycle modes, selected companion classes without a unit, unjustified exclusions, units closed without paths/checks, and prior `needs_validation` or changed-source gaps that no unit addresses. It proposes coverage, not findings. `stop` is the critic's own assessment: `true` only when it accepts no `missing_units` and no `reassign_ids`; the parent's loop condition below, not `stop` alone, decides whether another wave runs. For each fingerprint in `resolved_prior_leads`, the parent marks the linked unit or prior-lead entry resolved and records the critic's source-backed reason.
+The critic checks for unmapped entry points, unchecked parallel paths, missing lifecycle modes, selected companion classes without a unit, unjustified exclusions, units closed without paths/checks, and prior `needs_validation` or changed-source gaps that no unit addresses. It proposes coverage, not findings. `stop` is the critic's own assessment: `true` only when it accepts no `missing_units` and no `reassign_ids`; the parent's loop condition below, not `stop` alone, decides whether another wave runs. For each entry in `resolved_prior_leads`, the parent records the critic's reason in a bookkeeping field on the linked unit; the unit's status changes only through a hunter or verifier result, never because a lead is marked resolved.
 
-The parent rejects proposed units outside the review scope or source/local boundary, derives canonical IDs for accepted units, and deduplicates them against current units. A prior same-source completed unit may supply evidence; prior `deferred`, `blocked`, `out_of_scope`, or changed-source units become current work and never suppress an accepted unit. Fail rather than merge a canonical ID collision. For each legitimate `reassign_id` with live `blocked`, `covered`, or `candidate` evidence, append that exact terminal record to the unit's `attempts` with the critic's source-backed `reassignment_reason`. Preserve its owner, checks, artifacts, fingerprints, and unresolved facts in that archive. Increment the live `wave`; the next hunter must be a fresh owner and receives an `in_progress` unit with empty live evidence. The hunter's terminal result writes only its new evidence into the live fields. Never copy an archived owner's checks or artifacts into the new live attempt. Sort IDs and validate the ledger before another assignment. In `standard` and `deep`, when the post-wave critic reports no accepted `missing_units` or legitimate `reassign_ids` and no `planned` units remain, spend the separately reserved invocation on a distinct final-clean critic. Complete coverage only when that critic also returns no accepted work. If it finds work, queue it and repeat the wave, post-wave critic, and final-clean process. If time or resources force an early stop, mark every untouched unit `deferred`, preserve the critic's reason, and disclose the gap in the report. Never use a silent wave or agent cap as evidence of complete coverage.
+The parent rejects proposed units outside the review scope or source/local boundary, derives canonical IDs for accepted units, and deduplicates them against current units. A prior same-source completed unit may supply evidence; prior `deferred`, `blocked`, `out_of_scope`, or changed-source units become current work and never suppress an accepted unit. Fail rather than merge a canonical ID collision. For each legitimate `reassign_ids` entry with live `blocked`, `covered`, or `candidate` evidence, append that exact terminal record to the unit's `attempts` with that entry's `reason` as `reassignment_reason`. Preserve its owner, checks, artifacts, fingerprints, and unresolved facts in that archive. Increment the live `wave`; the next hunter must be a fresh owner and receives an `in_progress` unit with empty live evidence. The hunter's terminal result writes only its new evidence into the live fields. Never copy an archived owner's checks or artifacts into the new live attempt. Sort IDs and validate the ledger before another assignment. In `standard` and `deep`, when the post-wave critic reports no accepted `missing_units` or legitimate `reassign_ids` and no hunter-assignable `planned` units remain, spend the separately reserved invocation on a distinct final-clean critic. Complete coverage only when that critic also returns no accepted work. If it finds work, queue it and repeat the wave, post-wave critic, and final-clean process. If time or resources force an early stop, mark every untouched unit `deferred`, preserve the critic's reason, and disclose the gap in the report. Never use a silent wave or agent cap as evidence of complete coverage.
 
 The run profile bounds this loop. A `quick` run has exactly one hunter wave followed by exactly one final critic pass. Add each accepted `missing_unit` to the current ledger and mark it `deferred` with reason `quick_profile_final_critic`. For each legitimate evidence-bearing `reassign_id`, archive the live terminal state in `attempts`, increment `wave`, and set the live state to unassigned `deferred` with empty evidence and reason `quick_profile_final_critic`. Do not launch a second hunter wave or another critic. In a scoped run, the critic still reports out-of-scope gaps it notices, but the parent records them as `out_of_scope` with the critic's reason instead of assigning them. The early-stop rule above is the same mechanism: `quick` is a pre-declared early stop, not evidence of complete coverage.
 

@@ -46,22 +46,38 @@ Multiple runs against the same repo are additive. The skill uses prior ledgers a
 | `validate-coverage-ledger.cjs` | Zero-dependency validator for `coverage-ledger.json` in Phases 1–5 |
 | `validate-coverage-ledger.test.cjs` | Coverage-ledger validator tests |
 
+## DevSecOps skill and agent
+
+The repository also ships a `devsecops` skill and a `devsecops-engineer` agent.
+
+| File | Purpose |
+|------|---------|
+| `skills/devsecops/SKILL.md` | Review and implement modes, principles, workflow, rollout order, and report format for pipeline security controls |
+| `skills/devsecops/CONTROLS.md` | Control catalog from source review to runtime, with what `present`, `partial`, `missing`, and `not_observable` mean |
+| `agents/devsecops-engineer.md` | Agent that uses `devsecops` for pipeline controls and `security-audit` for vulnerabilities |
+
+`devsecops` builds and reviews the gates a pipeline needs (secret scanning, SAST, SCA, IaC and image scanning, SBOM, provenance, signing, admission, CI hardening). `security-audit` finds exploitable flaws, including in that pipeline. A missing gate is a `devsecops` gap; an exploitable path is a `security-audit` finding.
+
 ## Installation
+
+This repository is a fork of [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill). The commands below install this fork; replace `COPUR` with `cloudflare` to install upstream instead.
 
 Install the skill with the [Skills CLI](https://skills.sh):
 
 ```bash
-npx skills add https://github.com/cloudflare/security-audit-skill \
+npx skills add https://github.com/COPUR/security-audit-skill \
   --skill security-audit
 ```
 
 Use `--global` for a user-level installation:
 
 ```bash
-npx skills add https://github.com/cloudflare/security-audit-skill \
+npx skills add https://github.com/COPUR/security-audit-skill \
   --skill security-audit \
   --global
 ```
+
+Install the DevSecOps skill the same way with `--skill devsecops`. To use the agent in Claude Code, copy `agents/devsecops-engineer.md` into your project's `.claude/agents/` (or `~/.claude/agents/` for all projects) after installing both skills.
 
 Run `npx skills --help` for agent-selection and non-interactive options.
 
@@ -89,6 +105,14 @@ The skill activates automatically when the request matches its trigger (security
 - Node.js for the zero-dependency findings and coverage-ledger validators
 - An OS-enforced sandbox for target-controlled builds, tests, processes, browsers, emulators, fuzzers, and fixtures. It must disable external networking, use a sanitized allowlisted environment, enforce resource limits, and allow writes only to assigned scratch paths. Without these controls, the workflow keeps the lead as `needs_validation` instead of executing target code.
 
+## Development
+
+The validators have no dependencies. Run their tests with Node.js 18 or later:
+
+```bash
+node --test skills/security-audit/*.test.cjs
+```
+
 ## Design principles
 
 - **Only confirm established boundary failures.** Keep a source-grounded blocked lead as `needs_validation` with its exact unresolved fact.
@@ -99,7 +123,7 @@ The skill activates automatically when the request matches its trigger (security
 
 ## Contact
 
-Questions, feedback, or comparing notes on AI-driven security tooling: security-ai-research@cloudflare.com
+For the upstream skill: questions, feedback, or comparing notes on AI-driven security tooling: security-ai-research@cloudflare.com
 
 ## License
 
